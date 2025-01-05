@@ -7,14 +7,14 @@ namespace FizzleMonoGameExtended.Scene;
 
 public abstract class SceneBase(Game1 game) : DisposableComponent
 {
-    protected World World { get; private set; } = new World();
+    private World World { get; set; } = new World();
     protected ISystem<float> UpdateSystem { get; private set; }
     protected ISystem<SpriteBatch> DrawSystem { get; private set; }
 
     protected Game1 Game { get; } = game;
     protected ContentManager Content { get; } = game.Content;
     protected GraphicsDevice GraphicsDevice { get; } = game.GraphicsDevice;
-    protected SpriteBatch SpriteBatch { get; } = new SpriteBatch(game.GraphicsDevice);
+    private SpriteBatch SpriteBatch { get; } = new SpriteBatch(game.GraphicsDevice);
 
     public virtual void LoadContent() => InitializeSystems();
 

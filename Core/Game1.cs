@@ -36,7 +36,6 @@ public class Game1 : Game
         Exiting += OnExiting;
     }
 
-
     protected override void OnExiting(object sender, ExitingEventArgs args)
     {
         if (isExiting) return;
@@ -58,7 +57,6 @@ public class Game1 : Game
         }
     }
 
-
     protected override void Initialize()
     {
         var menuScene = new MenuScene(this);
@@ -66,7 +64,7 @@ public class Game1 : Game
         base.Initialize();
     }
 
-    protected override async void LoadContent()
+    protected override void LoadContent()
     {
         try
         {
@@ -75,24 +73,27 @@ public class Game1 : Game
 
             loadingScreen = new LoadingScreen(GraphicsDevice, spriteBatch, contentManager);
 
-            
-            loadingTask = contentManager.LoadAssetsAsync<Texture2D>(["s", "a"]);
+            loadingTask = contentManager.LoadAssetsAsync<Texture2D>(["Content/Textures/btn0"]);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading content: {ex.Message}");
         }
-        finally
-        {
-            isLoading = false;
-        }
+        // Remove the finally block that sets isLoading to false
     }
 
-    protected override void Update(GameTime gameTime)
+    protected override async void Update(GameTime gameTime)
     {
         if (!loadingScreen.IsComplete)
         {
+            await contentManager.UpdateAsync();
             loadingScreen.Update(gameTime);
+            
+            if (contentManager.Progress >= 1.0f)
+            {
+                loadingScreen.IsComplete = true;
+                isLoading = false;
+            }
         }
         else
         {
@@ -101,10 +102,8 @@ public class Game1 : Game
                 sceneManager.LoadScene("MenuScene");
                 isLoading = false;
             }
-
             sceneManager.UpdateCurrentScene(gameTime);
         }
-
 
         base.Update(gameTime);
     }

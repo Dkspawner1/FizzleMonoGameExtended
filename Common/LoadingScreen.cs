@@ -1,3 +1,5 @@
+using FizzleMonoGameExtended.Managers;
+
 namespace FizzleMonoGameExtended.Common;
 
 public class LoadingScreen
@@ -14,7 +16,7 @@ public class LoadingScreen
     private Texture2D fadeTexture;
     private Texture2D progressBarTexture;
 
-    public bool IsComplete { get; private set; } = false;
+    public bool IsComplete { get; internal set; } = false;
 
     public LoadingScreen(GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, ContentManagerAsync contentManager)
     {
