@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using FizzleMonoGameExtended.Common;
 using FizzleMonoGameExtended.Managers;
+using FizzleMonoGameExtended.Scene;
 
 namespace FizzleMonoGameExtended.Core;
 
@@ -13,7 +14,7 @@ public class Game1 : Game
     private DisposableManager disposableManager;
     private SceneManager sceneManager;
     private ContentManagerAsync contentManager;
-
+    private LoadingScreen loadingScreen;
     private Task loadingTask;
 
     private bool isLoading = true;
@@ -60,6 +61,8 @@ public class Game1 : Game
 
     protected override void Initialize()
     {
+        var menuScene = new MenuScene(this);
+        sceneManager.AddScene("MenuScene", menuScene);
         base.Initialize();
     }
 
@@ -69,9 +72,11 @@ public class Game1 : Game
         {
             spriteBatch = new SpriteBatch(GraphicsDevice);
             disposableManager.Add(spriteBatch);
-            loadingTask = contentManager.LoadAssetsAsync<Texture2D>(["s", "a"]);
-            await loadingTask;
 
+            loadingScreen = new LoadingScreen(GraphicsDevice, spriteBatch, contentManager);
+
+            
+            loadingTask = contentManager.LoadAssetsAsync<Texture2D>(["s", "a"]);
         }
         catch (Exception ex)
         {
@@ -83,26 +88,23 @@ public class Game1 : Game
         }
     }
 
-    protected override async void Update(GameTime gameTime)
+    protected override void Update(GameTime gameTime)
     {
-        if (isLoading)
+        if (!loadingScreen.IsComplete)
         {
-            await contentManager.UpdateAsync();
-            
-            if (contentManager.HasError)
-            {
-                Console.WriteLine($"Error loading content: {contentManager.LoadException.Message}");
-                isLoading = false;
-            }
-            else if (contentManager.Progress >= 1.0f)
-            {
-                isLoading = false;
-            }
+            loadingScreen.Update(gameTime);
         }
         else
         {
+            if (isLoading)
+            {
+                sceneManager.LoadScene("MenuScene");
+                isLoading = false;
+            }
+
             sceneManager.UpdateCurrentScene(gameTime);
         }
+
 
         base.Update(gameTime);
     }
@@ -111,9 +113,9 @@ public class Game1 : Game
     {
         GraphicsDevice.Clear(Color.CornflowerBlue);
 
-        if (isLoading)
+        if (!loadingScreen.IsComplete)
         {
-            DrawLoadingScreen();
+            loadingScreen.Draw();
         }
         else
         {
@@ -121,21 +123,5 @@ public class Game1 : Game
         }
 
         base.Draw(gameTime);
-    }
-
-    private void DrawLoadingScreen()
-    {
-        spriteBatch.Begin();
-        // Draw loading screen elements here
-        if (contentManager.HasError)
-        {
-            // Draw error message
-        }
-        else
-        {
-            // Draw progress bar using contentManager.Progress
-        }
-
-        spriteBatch.End();
     }
 }

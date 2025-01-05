@@ -16,10 +16,7 @@ public abstract class SceneBase(Game1 game) : DisposableComponent
     protected GraphicsDevice GraphicsDevice { get; } = game.GraphicsDevice;
     protected SpriteBatch SpriteBatch { get; } = new SpriteBatch(game.GraphicsDevice);
 
-    public virtual void LoadContent()
-    {
-        InitializeSystems();
-    }
+    public virtual void LoadContent() => InitializeSystems();
 
     protected abstract void InitializeSystems();
 
