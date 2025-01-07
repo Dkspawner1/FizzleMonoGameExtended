@@ -109,25 +109,35 @@ public class Game1 : Game
     {
         var assetPaths = new[]
         {
-            "Textures/btn0", 
-            "Textures/btn1",
+            "Textures/btn0",  // Matches bin/Debug/net8.0/Content/Textures/btn0.xnb
+            "Textures/btn1", 
             "Textures/btn2"
         };
 
         try
         {
+            // Load all assets at once
             await contentManager.LoadAssetsAsync<Texture2D>(assetPaths);
+        
+            // After loading is complete, acquire the textures
             foreach (var path in assetPaths)
             {
-                texturePool.Acquire(path);
+                try
+                {
+                    var texture = contentManager.Load<Texture2D>(path);
+                    texturePool.Acquire(path);
+                }
+                catch (ContentLoadException ex)
+                {
+                    Console.WriteLine($"Failed to load {path}: {ex.Message}");
+                }
             }
         }
-        catch (ContentLoadException ex)
+        catch (Exception ex)
         {
             Console.WriteLine($"Failed to load assets: {ex.Message}");
         }
     }
-
     protected override async void Update(GameTime gameTime)
     {
         switch (currentState)
