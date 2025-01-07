@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xna.Framework.Content;
@@ -56,6 +57,9 @@ public class ContentManagerAsync : ContentManager
     {
         try
         {
+            // Ensure path matches MonoGame's content loading convention
+            string normalizedPath = Path.Combine(RootDirectory, assetName);
+        
             var asset = await Task.Run(() => base.Load<T>(assetName), cts.Token);
             if (loadedAssets.TryAdd(assetName, asset))
             {
@@ -69,7 +73,6 @@ public class ContentManagerAsync : ContentManager
             throw;
         }
     }
-
     public async Task UpdateAsync()
     {
         if (cts.Token.IsCancellationRequested) return;

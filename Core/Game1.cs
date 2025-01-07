@@ -4,16 +4,16 @@ using FizzleMonoGameExtended.Assets;
 using FizzleMonoGameExtended.Common;
 using FizzleMonoGameExtended.Managers;
 using FizzleMonoGameExtended.Scene;
+using Microsoft.Xna.Framework.Content;
 
 namespace FizzleMonoGameExtended.Core;
 
 public class Game1 : Game
 {
-    private GraphicsDeviceManager graphics;
     private SpriteBatch spriteBatch;
-    private DisposableManager disposableManager;
+    private readonly DisposableManager disposableManager;
     private SceneManager sceneManager;
-    private ContentManagerAsync contentManager;
+    private readonly ContentManagerAsync contentManager;
     private LoadingScreen loadingScreen;
     private TexturePool texturePool;
 
@@ -29,7 +29,7 @@ public class Game1 : Game
 
     public Game1()
     {
-        graphics = new GraphicsDeviceManager(this);
+        _ = new GraphicsDeviceManager(this);
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
 
@@ -48,10 +48,9 @@ public class Game1 : Game
 
         try
         {
-            // Cleanup resources in reverse order of initialization
             if (sceneManager != null)
             {
-                foreach (var scene in sceneManager.scenes.Values)
+                foreach (var scene in sceneManager.Scenes.Values)
                 {
                     if (scene is ITextureUser textureUser)
                     {
@@ -61,7 +60,6 @@ public class Game1 : Game
                 sceneManager.Dispose();
             }
 
-            // Dispose other managed resources
             spriteBatch?.Dispose();
             disposableManager?.Dispose();
             contentManager?.Dispose();
@@ -79,10 +77,10 @@ public class Game1 : Game
 
     protected override void Initialize()
     {
-        texturePool = new TexturePool(GraphicsDevice,Content);
+        texturePool = new TexturePool(GraphicsDevice, Content);
         sceneManager = new SceneManager(texturePool);
         disposableManager.Add(sceneManager);
-        
+
         var menuScene = new MenuScene(this);
         sceneManager.AddScene("MenuScene", menuScene);
         base.Initialize();
@@ -98,8 +96,8 @@ public class Game1 : Game
 
             loadingScreen = new LoadingScreen(GraphicsDevice, spriteBatch, contentManager);
 
-            // Queue all assets for loading
-            QueueAssetLoading();
+            // Start asset loading without awaiting
+            _ = QueueAssetLoading();
         }
         catch (Exception ex)
         {
@@ -107,13 +105,26 @@ public class Game1 : Game
         }
     }
 
-    private async void QueueAssetLoading()
+    private async Task QueueAssetLoading()
     {
-        var assetPaths = new[] { "Content/Textures/btn0" };
-        foreach (var path in assetPaths)
+        var assetPaths = new[]
         {
-            var texture = texturePool.Acquire(path);
-            await contentManager.LoadAssetsAsync<Texture2D>([path]);
+            "Textures/btn0", 
+            "Textures/btn1",
+            "Textures/btn2"
+        };
+
+        try
+        {
+            await contentManager.LoadAssetsAsync<Texture2D>(assetPaths);
+            foreach (var path in assetPaths)
+            {
+                texturePool.Acquire(path);
+            }
+        }
+        catch (ContentLoadException ex)
+        {
+            Console.WriteLine($"Failed to load assets: {ex.Message}");
         }
     }
 
@@ -142,10 +153,9 @@ public class Game1 : Game
         {
             await Task.Delay(500); // Smooth transition
             currentState = GameState.Running;
-            sceneManager.LoadScene("MenuScene");
+            await sceneManager.LoadSceneAsync("MenuScene");
         }
     }
-
     private void UpdateRunningState(GameTime gameTime)
     {
         sceneManager.UpdateCurrentScene(gameTime);

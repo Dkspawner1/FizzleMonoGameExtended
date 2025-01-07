@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 namespace FizzleMonoGameExtended.Scene;
 
 public class MenuScene(Game1 game) : SceneBase(game)
@@ -11,9 +13,9 @@ public class MenuScene(Game1 game) : SceneBase(game)
         ];
     }
 
-    protected override void InitializeSystems()
+    protected override Task InitializeSystemsAsync()
     {
-        // Initialize your systems here
+        return base.InitializeSystemsAsync();
     }
     
 }

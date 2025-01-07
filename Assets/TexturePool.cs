@@ -22,9 +22,8 @@ public class TexturePool(GraphicsDevice graphics, ContentManager content) : Disp
 
         try
         {
-            // Check if asset is already loaded in ContentManagerAsync
+            // Match MonoGame's content loading pattern
             var texture = content.Load<Texture2D>(textureName);
-            pool[textureName].Enqueue(texture);
             return texture;
         }
         catch (ContentLoadException ex)

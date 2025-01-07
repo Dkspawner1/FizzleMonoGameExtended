@@ -1,22 +1,20 @@
 using System;
+using System.Collections.Generic;
+using FizzleMonoGameExtended.Common;
 using FizzleMonoGameExtended.Managers;
 
-namespace FizzleMonoGameExtended.Common;
-
-public class LoadingScreen
+public class LoadingScreen : DisposableComponent
 {
     private readonly GraphicsDevice graphics;
     private readonly SpriteBatch spriteBatch;
     private readonly ContentManagerAsync content;
-    private SpriteFont loadingFont;
-    private const string LoadingText = "Loading...";
-    private Vector2 textPosition = Vector2.Zero;
-
+    private readonly Dictionary<string, Texture2D> loadingTextures = new(4);
 
     private LoadingState currentState = LoadingState.Starting;
+    private float fadeAlpha = 1f;
+    private Vector2 textPosition = Vector2.Zero;
 
-    private Texture2D fadeTexture;
-    private Texture2D progressBarTexture;
+    public bool IsComplete { get; private set; }
 
     [Flags]
     private enum LoadingState : byte
@@ -26,11 +24,6 @@ public class LoadingScreen
         Loading = 1 << 1,
         Finished = 1 << 2,
     }
-
-
-    // Transition:
-    public bool IsComplete { get; private set; }
-    private float fadeAlpha = 1f;
 
     public LoadingScreen(GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, ContentManagerAsync contentManager)
     {
@@ -44,10 +37,10 @@ public class LoadingScreen
 
     private void InitializeTextures()
     {
-        fadeTexture = new Texture2D(graphics, 1, 1);
-        fadeTexture.SetData(new[] { Color.Black });
-        progressBarTexture = new Texture2D(graphics, 1, 1);
-        progressBarTexture.SetData(new[] { Color.White });
+        loadingTextures["fade"] = new Texture2D(graphics, 1, 1);
+        loadingTextures["fade"].SetData(new[] { Color.Black });
+        loadingTextures["progress"] = new Texture2D(graphics, 1, 1);
+        loadingTextures["progress"].SetData(new[] { Color.White });
     }
 
     private void CalculateTextPosition()
@@ -61,59 +54,46 @@ public class LoadingScreen
 
     public void Update(GameTime gameTime)
     {
+        if (IsDisposed) return;
+
         float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
         switch (currentState)
         {
             case LoadingState.Starting:
-                fadeAlpha -= deltaTime;
+                fadeAlpha = Math.Max(0f, fadeAlpha - deltaTime * 2f); // Faster fade
                 if (fadeAlpha <= 0f)
-                {
-                    fadeAlpha = 0f;
                     currentState = LoadingState.Loading;
-                }
-
                 break;
 
             case LoadingState.Loading:
+                // Add progress smoothing
                 if (content.Progress >= 1.0f)
                 {
                     currentState = LoadingState.Finished;
                 }
-
                 break;
 
             case LoadingState.Finished:
-                fadeAlpha += deltaTime;
+                fadeAlpha = Math.Min(1f, fadeAlpha + deltaTime);
                 if (fadeAlpha >= 1f)
-                {
-                    fadeAlpha = 1f;
                     IsComplete = true;
-                }
-
                 break;
         }
     }
 
     public void Draw()
     {
+        if (IsDisposed) return;
+
         spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
 
         if (currentState is LoadingState.Loading)
         {
             DrawProgressBar();
-            
-            // Remove the loadingFont check since we'll use basic text for now
-            var loadingText = $"{LoadingText} {(int)(content.Progress * 100)}%";
-            var textSize = Vector2.One * 12; // Basic size estimation
-            textPosition = new Vector2(
-                (graphics.Viewport.Width - textSize.X) / 2,
-                (graphics.Viewport.Height - textSize.Y) / 2 - 30
-            );
+            DrawLoadingText();
         }
 
-        // Draw fade overlay
-        spriteBatch.Draw(fadeTexture, graphics.Viewport.Bounds, Color.Black * fadeAlpha);
-
+        spriteBatch.Draw(loadingTextures["fade"], graphics.Viewport.Bounds, Color.Black * fadeAlpha);
         spriteBatch.End();
     }
 
@@ -124,13 +104,28 @@ public class LoadingScreen
         int barX = (graphics.Viewport.Width - barWidth) / 2;
         int barY = (graphics.Viewport.Height - barHeight) / 2;
 
+        spriteBatch.Draw(loadingTextures["progress"], 
+            new Rectangle(barX, barY, barWidth, barHeight), Color.DarkGray);
+        spriteBatch.Draw(loadingTextures["progress"],
+            new Rectangle(barX, barY, (int)(barWidth * content.Progress), barHeight), Color.Green);
+    }
 
-        // Draw background
-        spriteBatch.Draw(progressBarTexture, new Rectangle(barX, barY, barWidth, barHeight),
-            Color.DarkGray);
-        // Draw progress
-        spriteBatch.Draw(progressBarTexture,
-            new Rectangle(barX, barY, (int)(barWidth * content.Progress), barHeight),
-            Color.Green);
+    private void DrawLoadingText()
+    {
+        var loadingText = $"Loading... {(int)(content.Progress * 100)}%";
+        var textSize = Vector2.One * 12;
+        textPosition = new Vector2(
+            (graphics.Viewport.Width - textSize.X) / 2,
+            (graphics.Viewport.Height - textSize.Y) / 2 - 30
+        );
+    }
+
+    protected override void DisposeManagedResources()
+    {
+        foreach (var texture in loadingTextures.Values)
+        {
+            texture?.Dispose();
+        }
+        loadingTextures.Clear();
     }
 }
