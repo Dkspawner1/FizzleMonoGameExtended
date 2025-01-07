@@ -9,8 +9,14 @@ namespace FizzleMonoGameExtended.Managers;
 
 public class ContentManagerAsync(IServiceProvider serviceProvider) : ContentManager(serviceProvider)
 {
+    // Added capacity hints to collections
     private readonly ConcurrentQueue<Func<Task>> loadActions = new();
-    private readonly ConcurrentDictionary<string, object> loadedAssets = new();
+    private readonly ConcurrentDictionary<string, object> loadedAssets = new(32, 4);
+    //
+    
+    //Added cancellation support
+    private readonly CancellationTokenSource cts = new();
+
     private int totalAssets;
     private int loadedAssetCount;
     private Exception loadException;
