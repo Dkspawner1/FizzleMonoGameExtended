@@ -79,7 +79,6 @@ public class Game1 : Game
         {
             Console.WriteLine($"Error loading content: {ex.Message}");
         }
-        // Remove the finally block that sets isLoading to false
     }
 
     protected override async void Update(GameTime gameTime)
@@ -113,13 +112,9 @@ public class Game1 : Game
         GraphicsDevice.Clear(Color.CornflowerBlue);
 
         if (!loadingScreen.IsComplete)
-        {
             loadingScreen.Draw();
-        }
         else
-        {
             sceneManager.DrawCurrentScene(gameTime);
-        }
 
         base.Draw(gameTime);
     }
