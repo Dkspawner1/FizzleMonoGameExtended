@@ -2,22 +2,18 @@ namespace FizzleMonoGameExtended.Scene;
 
 public class MenuScene(Game1 game) : SceneBase(game)
 {
+    protected override string[] GetRequiredTextures()
+    {
+        return
+        [
+            "Content/Textures/btn0"
+            // Add other required textures here
+        ];
+    }
+
     protected override void InitializeSystems()
     {
+        // Initialize your systems here
     }
-
-    public override void LoadContent()
-    {
-        base.LoadContent();
-    }
-
-    public override void Update(GameTime gameTime)
-    {
-        base.Update(gameTime);
-    }
-
-    public override void Draw(GameTime gameTime)
-    {
-        base.Draw(gameTime);
-    }
+    
 }

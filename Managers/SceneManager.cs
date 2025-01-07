@@ -1,12 +1,13 @@
 using System.Collections.Generic;
+using FizzleMonoGameExtended.Assets;
 using FizzleMonoGameExtended.Common;
 using FizzleMonoGameExtended.Scene;
 
 namespace FizzleMonoGameExtended.Managers;
 
-public class SceneManager : DisposableComponent
+public class SceneManager(TexturePool texturePool) : DisposableComponent
 {
-    private readonly Dictionary<string, SceneBase> scenes = [];
+    public readonly Dictionary<string, SceneBase> scenes = [];
     private SceneBase currentScene;
 
     public void AddScene(string sceneName, SceneBase scene) => scenes[sceneName] = scene;
@@ -14,9 +15,16 @@ public class SceneManager : DisposableComponent
     public void LoadScene(string sceneName)
     {
         if (!scenes.TryGetValue(sceneName, out SceneBase newScene)) return;
-        currentScene?.Dispose();
+        
+        // Properly cleanup current scene
+        if (currentScene != null)
+        {
+            currentScene.ReleaseTextures(texturePool);
+            currentScene.Dispose();
+        }
+        
         currentScene = newScene;
-        currentScene.LoadContent();
+        currentScene.LoadContent(texturePool);
     }
 
     public void UpdateCurrentScene(GameTime gameTime) => currentScene?.Update(gameTime);
@@ -24,8 +32,20 @@ public class SceneManager : DisposableComponent
 
     protected override void DisposeManagedResources()
     {
+        if (currentScene != null)
+        {
+            currentScene.ReleaseTextures(texturePool);
+            currentScene.Dispose();
+        }
+
         foreach (var scene in scenes.Values)
-            scene?.Dispose();
+        {
+            if (scene != currentScene) // Avoid double disposal
+            {
+                scene.ReleaseTextures(texturePool);
+                scene.Dispose();
+            }
+        }
 
         scenes.Clear();
     }

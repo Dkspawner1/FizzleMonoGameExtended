@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
+using FizzleMonoGameExtended.Assets;
 using FizzleMonoGameExtended.Common;
 using FizzleMonoGameExtended.Managers;
 using FizzleMonoGameExtended.Scene;
@@ -10,15 +11,21 @@ public class Game1 : Game
 {
     private GraphicsDeviceManager graphics;
     private SpriteBatch spriteBatch;
-
     private DisposableManager disposableManager;
     private SceneManager sceneManager;
     private ContentManagerAsync contentManager;
     private LoadingScreen loadingScreen;
-    private Task loadingTask;
+    private TexturePool texturePool;
 
-    private bool isLoading = true;
-    private bool isExiting = false;
+    private GameState currentState = GameState.Loading;
+
+    private bool isExiting;
+
+    private enum GameState
+    {
+        Loading,
+        Running
+    }
 
     public Game1()
     {
@@ -27,10 +34,8 @@ public class Game1 : Game
         IsMouseVisible = true;
 
         disposableManager = new DisposableManager();
-        sceneManager = new SceneManager();
         contentManager = new ContentManagerAsync(Services);
 
-        disposableManager.Add(sceneManager);
         disposableManager.Add(contentManager);
 
         Exiting += OnExiting;
@@ -43,13 +48,28 @@ public class Game1 : Game
 
         try
         {
-            sceneManager?.Dispose();
+            // Cleanup resources in reverse order of initialization
+            if (sceneManager != null)
+            {
+                foreach (var scene in sceneManager.scenes.Values)
+                {
+                    if (scene is ITextureUser textureUser)
+                    {
+                        textureUser.ReleaseTextures(texturePool);
+                    }
+                }
+                sceneManager.Dispose();
+            }
+
+            // Dispose other managed resources
+            spriteBatch?.Dispose();
             disposableManager?.Dispose();
             contentManager?.Dispose();
+            texturePool?.Dispose();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error during exit: {ex.Message}");
+            Console.WriteLine($"Error during cleanup: {ex.Message}");
         }
         finally
         {
@@ -59,10 +79,15 @@ public class Game1 : Game
 
     protected override void Initialize()
     {
+        texturePool = new TexturePool(GraphicsDevice,Content);
+        sceneManager = new SceneManager(texturePool);
+        disposableManager.Add(sceneManager);
+        
         var menuScene = new MenuScene(this);
         sceneManager.AddScene("MenuScene", menuScene);
         base.Initialize();
     }
+
 
     protected override void LoadContent()
     {
@@ -73,7 +98,8 @@ public class Game1 : Game
 
             loadingScreen = new LoadingScreen(GraphicsDevice, spriteBatch, contentManager);
 
-            loadingTask = contentManager.LoadAssetsAsync<Texture2D>(["Content/Textures/btn0"]);
+            // Queue all assets for loading
+            QueueAssetLoading();
         }
         catch (Exception ex)
         {
@@ -81,40 +107,64 @@ public class Game1 : Game
         }
     }
 
+    private async void QueueAssetLoading()
+    {
+        var assetPaths = new[] { "Content/Textures/btn0" };
+        foreach (var path in assetPaths)
+        {
+            var texture = texturePool.Acquire(path);
+            await contentManager.LoadAssetsAsync<Texture2D>([path]);
+        }
+    }
+
     protected override async void Update(GameTime gameTime)
     {
-        if (!loadingScreen.IsComplete)
+        switch (currentState)
         {
-            await contentManager.UpdateAsync();
-            loadingScreen.Update(gameTime);
-            
-            if (contentManager.Progress >= 1.0f)
-            {
-                loadingScreen.IsComplete = true;
-                isLoading = false;
-            }
-        }
-        else
-        {
-            if (isLoading)
-            {
-                sceneManager.LoadScene("MenuScene");
-                isLoading = false;
-            }
-            sceneManager.UpdateCurrentScene(gameTime);
+            case GameState.Loading:
+                await UpdateLoadingState(gameTime);
+                break;
+
+            case GameState.Running:
+                UpdateRunningState(gameTime);
+                break;
         }
 
         base.Update(gameTime);
+    }
+
+    private async Task UpdateLoadingState(GameTime gameTime)
+    {
+        await contentManager.UpdateAsync();
+        loadingScreen.Update(gameTime);
+
+        if (contentManager.Progress >= 1.0f)
+        {
+            await Task.Delay(500); // Smooth transition
+            currentState = GameState.Running;
+            sceneManager.LoadScene("MenuScene");
+        }
+    }
+
+    private void UpdateRunningState(GameTime gameTime)
+    {
+        sceneManager.UpdateCurrentScene(gameTime);
     }
 
     protected override void Draw(GameTime gameTime)
     {
         GraphicsDevice.Clear(Color.CornflowerBlue);
 
-        if (!loadingScreen.IsComplete)
-            loadingScreen.Draw();
-        else
-            sceneManager.DrawCurrentScene(gameTime);
+        switch (currentState)
+        {
+            case GameState.Loading:
+                loadingScreen.Draw();
+                break;
+
+            case GameState.Running:
+                sceneManager.DrawCurrentScene(gameTime);
+                break;
+        }
 
         base.Draw(gameTime);
     }

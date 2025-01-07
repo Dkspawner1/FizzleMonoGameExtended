@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xna.Framework.Content;
 
@@ -21,6 +23,7 @@ public class ContentManagerAsync(IServiceProvider serviceProvider) : ContentMana
     public async Task LoadAssetsAsync<T>(string[] assetNames)
     {
         totalAssets += assetNames.Length;
+        var loadTasks = new List<Task>();
 
         foreach (var assetName in assetNames)
         {
@@ -29,18 +32,22 @@ public class ContentManagerAsync(IServiceProvider serviceProvider) : ContentMana
                 try
                 {
                     var asset = await Task.Run(() => base.Load<T>(assetName));
-                    loadedAssets[assetName] = asset;
-                    loadedAssetCount++;
+                    loadedAssets.TryAdd(assetName, asset);
+                    Interlocked.Increment(ref loadedAssetCount);
                 }
                 catch (Exception ex)
                 {
+                    Console.WriteLine($"Failed to load asset {assetName}: {ex.Message}");
                     loadException = ex;
-                    loadingComplete.TrySetException(ex);
                 }
             });
         }
 
-        await loadingComplete.Task;
+        // Allow partial success
+        if (loadedAssetCount > 0)
+            loadingComplete.TrySetResult(true);
+        else if (loadException != null)
+            loadingComplete.TrySetException(loadException);
     }
 
     public async Task UpdateAsync()

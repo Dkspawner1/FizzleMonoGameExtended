@@ -1,25 +1,38 @@
+using System;
+using System.Collections.Generic;
 using DefaultEcs;
 using DefaultEcs.System;
+using FizzleMonoGameExtended.Assets;
 using FizzleMonoGameExtended.Common;
 using Microsoft.Xna.Framework.Content;
 
 namespace FizzleMonoGameExtended.Scene;
 
-public abstract class SceneBase(Game1 game) : DisposableComponent
+public abstract class SceneBase(Game1 game) : DisposableComponent, ITextureUser
 {
-    private World World { get; set; } = new World();
-    protected ISystem<float> UpdateSystem { get; private set; }
-    protected ISystem<SpriteBatch> DrawSystem { get; private set; }
+    private readonly World world = new();
+    protected ISystem<float> UpdateSystem { get; }
+    protected ISystem<SpriteBatch> DrawSystem { get; }
+    protected readonly Dictionary<string, Texture2D> SceneTextures = new();
 
-    protected Game1 Game { get; } = game;
-    protected ContentManager Content { get; } = game.Content;
-    protected GraphicsDevice GraphicsDevice { get; } = game.GraphicsDevice;
-    private SpriteBatch SpriteBatch { get; } = new SpriteBatch(game.GraphicsDevice);
+    protected SpriteBatch SpriteBatch { get; private set; }
+    protected TexturePool TexturePool { get; private set; }
 
-    public virtual void LoadContent() => InitializeSystems();
+    public virtual void LoadContent(TexturePool pool)
+    {
+        TexturePool = pool;
+        SpriteBatch = new SpriteBatch(game.GraphicsDevice);
 
+        foreach (var textureName in GetRequiredTextures())
+        {
+            SceneTextures[textureName] = TexturePool.Acquire(textureName);
+        }
+
+        InitializeSystems();
+    }
+
+    protected abstract string[] GetRequiredTextures();
     protected abstract void InitializeSystems();
-
 
     public virtual void Update(GameTime gameTime)
     {
@@ -29,17 +42,37 @@ public abstract class SceneBase(Game1 game) : DisposableComponent
 
     public virtual void Draw(GameTime gameTime)
     {
-        SpriteBatch.Begin();
-        DrawSystem?.Update(SpriteBatch);
-        SpriteBatch.End();
+        if (SpriteBatch is null)
+            return;
+
+        try
+        {
+            SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+            DrawSystem?.Update(SpriteBatch);
+            SpriteBatch.End();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during draw: {ex.Message}");
+        }
+    }
+
+    public virtual void ReleaseTextures(TexturePool pool)
+    {
+        foreach (var (name, texture) in SceneTextures)
+        {
+            pool.Release(name, texture);
+        }
+        SceneTextures.Clear();
     }
 
     protected override void DisposeManagedResources()
     {
         base.DisposeManagedResources();
-        SpriteBatch.Dispose();
-        World.Dispose();
+        SpriteBatch?.Dispose();
+        world.Dispose();
         UpdateSystem?.Dispose();
         DrawSystem?.Dispose();
+        ReleaseTextures(TexturePool);
     }
 }
