@@ -23,6 +23,8 @@ public class Game1 : Game
     private bool isExiting;
     private bool isInitialized;
 
+    private bool isTransitioningToMenu = false; 
+    
     private enum GameState
     {
         Loading,
@@ -35,7 +37,10 @@ public class Game1 : Game
         graphics = new GraphicsDeviceManager(this);
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
-
+        IsFixedTimeStep = false; 
+        graphics.SynchronizeWithVerticalRetrace = false;
+        
+        
         disposableManager = new DisposableManager();
         contentManager = new ContentManagerAsync(Services);
         disposableManager.Add(contentManager);
@@ -122,11 +127,13 @@ public class Game1 : Game
                 "Textures/btn2"
             };
 
+            Console.WriteLine("Game1: Starting asset loading");
             await contentManager.LoadAssetsAsync<Texture2D>(assetPaths);
+            Console.WriteLine("Game1: Asset loading completed");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Asset loading error: {ex.Message}");
+            Console.WriteLine($"Game1: Asset loading error: {ex}");
             currentState = GameState.Error;
         }
     }
@@ -163,19 +170,36 @@ public class Game1 : Game
 
     private async Task UpdateLoadingState(GameTime gameTime)
     {
-        await contentManager.UpdateAsync();
         loadingScreen.Update(gameTime);
-
-        if (contentManager.Progress >= 1.0f && !contentManager.HasError)
+    
+        if (!isTransitioningToMenu && 
+            !contentManager.IsLoading && 
+            contentManager.Progress >= 1.0f && 
+            !contentManager.HasError)
         {
+            isTransitioningToMenu = true;
+            Console.WriteLine("Content loading complete, transitioning to menu scene");
             await Task.Delay(500); // Smooth transition
-            currentState = GameState.Running;
-            await sceneManager.LoadSceneAsync("MenuScene");
+        
+            try
+            {
+                await sceneManager.LoadSceneAsync("MenuScene");
+                Console.WriteLine("Menu scene loaded successfully");
+                currentState = GameState.Running;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to load menu scene: {ex}");
+                currentState = GameState.Error;
+            }
         }
         else if (contentManager.HasError)
         {
+            Console.WriteLine($"Content loading error: {contentManager.LoadException?.Message}");
             currentState = GameState.Error;
         }
+    
+        await contentManager.UpdateAsync();
     }
 
     private void UpdateRunningState(GameTime gameTime)

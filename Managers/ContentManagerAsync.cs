@@ -31,31 +31,48 @@ public class ContentManagerAsync : ContentManager
 
     public async Task LoadAssetsAsync<T>(string[] assetNames)
     {
-        if (assetNames == null || assetNames.Length == 0)
-            return;
+        Console.WriteLine($"Starting to load {assetNames.Length} assets:");
+        foreach (var name in assetNames)
+        {
+            Console.WriteLine($"  - {name}");
+        }
 
         await loadingSemaphore.WaitAsync();
         try
         {
-            if (IsLoading) return;
-            IsLoading = true;
+            if (IsLoading)
+            {
+                Console.WriteLine("Already loading, returning early");
+                return;
+            }
 
+            IsLoading = true;
             totalAssets = assetNames.Length;
             loadedAssetCount = 0;
 
-            var loadTasks = new List<Task>(assetNames.Length);
+            Console.WriteLine($"Beginning load of {totalAssets} assets");
+
             foreach (var assetName in assetNames)
             {
-                if (cts.Token.IsCancellationRequested) break;
-                loadTasks.Add(LoadAssetAsync<T>(assetName));
-                await Task.Delay(10); // Small delay to prevent overwhelming the content pipeline
+                if (cts.Token.IsCancellationRequested)
+                {
+                    Console.WriteLine("Loading cancelled");
+                    break;
+                }
+
+                Console.WriteLine($"Loading asset: {assetName}");
+                await LoadAssetAsync<T>(assetName);
+                Console.WriteLine(
+                    $"Current progress after loading {assetName}: {Progress:P0} ({loadedAssetCount}/{totalAssets})");
+                await Task.Delay(50);
             }
 
-            await Task.WhenAll(loadTasks);
+            Console.WriteLine($"Asset loading complete. Final count: {loadedAssetCount}/{totalAssets}");
             loadingComplete.TrySetResult(true);
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"Error in LoadAssetsAsync: {ex}");
             loadException = ex;
             loadingComplete.TrySetException(ex);
             throw;
@@ -71,27 +88,48 @@ public class ContentManagerAsync : ContentManager
     {
         try
         {
+            Console.WriteLine($"Starting LoadAssetAsync for: {assetName}");
+
             var asset = await Task.Run(() =>
             {
                 try
                 {
-                    return Load<T>(assetName);
+                    Console.WriteLine($"Task.Run: Loading {assetName}");
+                    // Check if already loaded first
+                    if (loadedAssets.TryGetValue(assetName, out var cachedAsset))
+                    {
+                        Console.WriteLine($"Found cached asset: {assetName}");
+                        return (T)cachedAsset;
+                    }
+
+                    var loadedAsset = base.Load<T>(assetName);
+                    Console.WriteLine($"Task.Run: Successfully loaded {assetName}");
+
+                    // Add to cache and increment counter in one atomic operation
+                    if (loadedAssets.TryAdd(assetName, loadedAsset))
+                    {
+                        int newCount = Interlocked.Increment(ref loadedAssetCount);
+                        Console.WriteLine($"Added asset and incremented count: {newCount}/3");
+                    }
+
+                    return loadedAsset;
                 }
                 catch (ContentLoadException ex)
                 {
-                    Console.WriteLine($"Failed to load {assetName}: {ex.Message}");
+                    Console.WriteLine($"Task.Run: Failed to load {assetName}: {ex.Message}");
                     throw;
                 }
             }, cts.Token);
 
-            if (loadedAssets.TryAdd(assetName, asset))
+            if (asset == null)
             {
-                Interlocked.Increment(ref loadedAssetCount);
+                Console.WriteLine($"Loaded asset is null for {assetName}");
+                throw new ContentLoadException($"Asset {assetName} loaded as null");
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Console.WriteLine($"Failed to load asset: {assetName}: {ex.Message}");
+            Console.WriteLine($"Exception in LoadAssetAsync for {assetName}: {ex}");
             throw;
         }
     }
@@ -99,12 +137,15 @@ public class ContentManagerAsync : ContentManager
     public override T Load<T>(string assetName)
     {
         if (loadedAssets.TryGetValue(assetName, out var asset))
+        {
+            Console.WriteLine($"Returning cached asset: {assetName}");
             return (T)asset;
+        }
 
-        var loadedAsset = base.Load<T>(assetName);
-        loadedAssets.TryAdd(assetName, loadedAsset);
-        return loadedAsset;
+        Console.WriteLine($"Asset not in cache, loading: {assetName}");
+        return base.Load<T>(assetName);
     }
+
 
     public async Task UpdateAsync()
     {
@@ -140,6 +181,7 @@ public class ContentManagerAsync : ContentManager
                 {
                     (asset as IDisposable)?.Dispose();
                 }
+
                 loadedAssets.Clear();
             }
             catch (ObjectDisposedException)
@@ -147,6 +189,7 @@ public class ContentManagerAsync : ContentManager
                 // Ignore if already disposed
             }
         }
+
         base.Dispose(disposing);
     }
 }

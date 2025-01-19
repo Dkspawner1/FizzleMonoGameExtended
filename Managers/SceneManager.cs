@@ -13,7 +13,8 @@ public class SceneManager(TexturePool texturePool) : DisposableComponent
     public IReadOnlyDictionary<string, SceneBase> Scenes => scenes;
     private SceneBase currentScene;
     private bool isLoading;
-
+    private string currentSceneName;  
+    
     public void AddScene(string sceneName, SceneBase scene)
     {
         if (IsDisposed) return;
@@ -30,7 +31,10 @@ public class SceneManager(TexturePool texturePool) : DisposableComponent
     public async Task LoadSceneAsync(string sceneName)
     {
         if (IsDisposed || isLoading) return;
-        
+        if (sceneName == currentSceneName && currentScene != null) return; // Don't reload same scene
+    
+        Console.WriteLine($"Attempting to load scene: {sceneName}");
+    
         if (!scenes.TryGetValue(sceneName, out SceneBase newScene))
         {
             Console.WriteLine($"Scene {sceneName} not found");
@@ -40,21 +44,33 @@ public class SceneManager(TexturePool texturePool) : DisposableComponent
         try
         {
             isLoading = true;
+            Console.WriteLine($"Starting scene transition from {currentSceneName} to {sceneName}");
 
             // Cleanup current scene
             if (currentScene != null)
             {
+                Console.WriteLine($"Cleaning up current scene: {currentSceneName}");
                 currentScene.ReleaseTextures(texturePool);
                 currentScene.Dispose();
+                currentScene = null;
+                currentSceneName = null;
             }
 
+            // Initialize new scene
+            Console.WriteLine($"Initializing new scene: {sceneName}");
+            await newScene.LoadContentAsync(texturePool);
+            
+            // Only set current scene after successful initialization
             currentScene = newScene;
-            await currentScene.LoadContentAsync(texturePool);
+            currentSceneName = sceneName;
+            Console.WriteLine($"Scene transition complete: {sceneName}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading scene {sceneName}: {ex.Message}");
+            Console.WriteLine($"Error loading scene {sceneName}: {ex}");
             currentScene = null;
+            currentSceneName = null;
+            throw; // Rethrow to handle in Game1
         }
         finally
         {
@@ -62,20 +78,23 @@ public class SceneManager(TexturePool texturePool) : DisposableComponent
         }
     }
 
+
     public void UpdateCurrentScene(GameTime gameTime)
     {
-        if (IsDisposed || isLoading || currentScene == null) return;
-        
+        if (IsDisposed || isLoading) return;
+    
         try
         {
-            currentScene.Update(gameTime);
+            if (currentScene != null)
+            {
+                currentScene.Update(gameTime);
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error updating scene: {ex.Message}");
+            Console.WriteLine($"Error updating scene: {ex}");
         }
     }
-
     public void DrawCurrentScene(GameTime gameTime)
     {
         if (IsDisposed || isLoading || currentScene == null) return;
@@ -86,10 +105,10 @@ public class SceneManager(TexturePool texturePool) : DisposableComponent
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error drawing scene: {ex.Message}");
+            Console.WriteLine($"Error drawing scene: {ex}");
         }
     }
-
+    
     protected override void DisposeManagedResources()
     {
         if (currentScene != null)

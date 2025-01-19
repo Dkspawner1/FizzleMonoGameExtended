@@ -84,6 +84,7 @@ public class LoadingScreen : DisposableComponent
         try
         {
             float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            Console.WriteLine($"LoadingScreen Update - Progress: {content.Progress:P0} ({content.Progress})");
             UpdateLoadingState(deltaTime);
         }
         catch (Exception ex)
@@ -125,10 +126,10 @@ public class LoadingScreen : DisposableComponent
         {
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
 
-            if (currentState == LoadingState.Loading)
+            // Always draw the progress bar while loading
+            if (currentState == LoadingState.Loading || currentState == LoadingState.Starting)
             {
                 DrawProgressBar();
-                DrawLoadingText();
             }
 
             // Draw fade overlay
@@ -144,11 +145,11 @@ public class LoadingScreen : DisposableComponent
 
     private void DrawProgressBar()
     {
-        // Draw background
+        var progressWidth = (int)(progressBarWidth * content.Progress);
+        Console.WriteLine($"Drawing progress bar - Width: {progressWidth}/{progressBarWidth} (Progress: {content.Progress:P0})");
+    
         spriteBatch.Draw(progressTexture, progressBarBounds, progressBarBackgroundColor);
 
-        // Draw progress
-        var progressWidth = (int)(progressBarWidth * content.Progress);
         var progressRect = new Rectangle(
             progressBarBounds.X,
             progressBarBounds.Y,
@@ -157,7 +158,6 @@ public class LoadingScreen : DisposableComponent
         );
         spriteBatch.Draw(progressTexture, progressRect, progressBarColor);
     }
-
     private void DrawLoadingText()
     {
         if (content.HasError)
@@ -167,6 +167,7 @@ public class LoadingScreen : DisposableComponent
         else
         {
             var loadingText = $"Loading... {(int)(content.Progress * 100)}%";
+            // var font =  content.Load<SpriteFont>("")
             // Implement text drawing
         }
     }
