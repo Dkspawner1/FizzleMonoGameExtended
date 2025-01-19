@@ -24,10 +24,7 @@ public class ContentManagerAsync : ContentManager
     public Exception LoadException => loadException;
     public bool IsLoading { get; private set; }
 
-    public ContentManagerAsync(IServiceProvider serviceProvider) : base(serviceProvider)
-    {
-        RootDirectory = "Content";
-    }
+    public ContentManagerAsync(IServiceProvider serviceProvider) : base(serviceProvider) => RootDirectory = "Content";
 
     public async Task LoadAssetsAsync<T>(string[] assetNames)
     {

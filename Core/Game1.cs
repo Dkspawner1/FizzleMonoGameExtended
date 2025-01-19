@@ -12,19 +12,18 @@ namespace FizzleMonoGameExtended.Core;
 public class Game1 : Game
 {
     private readonly GraphicsDeviceManager graphics;
-    private SpriteBatch spriteBatch;
     private readonly DisposableManager disposableManager;
-    private SceneManager sceneManager;
     private readonly ContentManagerAsync contentManager;
+
+    private SceneManager sceneManager;
     private LoadingScreen loadingScreen;
     private TexturePool texturePool;
 
     private GameState currentState = GameState.Loading;
     private bool isExiting;
     private bool isInitialized;
+    private bool isTransitioningToMenu;
 
-    private bool isTransitioningToMenu = false; 
-    
     private enum GameState
     {
         Loading,
@@ -35,16 +34,15 @@ public class Game1 : Game
     public Game1()
     {
         graphics = new GraphicsDeviceManager(this);
-        Content.RootDirectory = "Content";
-        IsMouseVisible = true;
-        IsFixedTimeStep = false; 
-        graphics.SynchronizeWithVerticalRetrace = false;
-        
-        
         disposableManager = new DisposableManager();
         contentManager = new ContentManagerAsync(Services);
-        disposableManager.Add(contentManager);
 
+        Content.RootDirectory = "Content";
+        IsMouseVisible = true;
+        IsFixedTimeStep = false;
+        graphics.SynchronizeWithVerticalRetrace = false;
+
+        disposableManager.Add(contentManager);
         Window.ClientSizeChanged += OnClientSizeChanged;
         Exiting += OnExiting;
     }
@@ -57,7 +55,6 @@ public class Game1 : Game
         graphics.PreferredBackBufferHeight = Window.ClientBounds.Height;
         graphics.ApplyChanges();
 
-        // Notify current scene of resolution change if needed
         sceneManager?.OnResolutionChanged(graphics.PreferredBackBufferWidth,
             graphics.PreferredBackBufferHeight);
     }
@@ -95,15 +92,14 @@ public class Game1 : Game
         sceneManager = new SceneManager(texturePool);
         disposableManager.Add(sceneManager);
 
-        var menuScene = new MenuScene(this);
-        sceneManager.AddScene("MenuScene", menuScene);
+        sceneManager.AddScene("MenuScene", new MenuScene(this));
     }
 
     protected override void LoadContent()
     {
         try
         {
-            spriteBatch = new SpriteBatch(GraphicsDevice);
+            var spriteBatch = new SpriteBatch(GraphicsDevice);
             disposableManager.Add(spriteBatch);
 
             loadingScreen = new LoadingScreen(GraphicsDevice, spriteBatch, contentManager);
@@ -120,20 +116,12 @@ public class Game1 : Game
     {
         try
         {
-            var assetPaths = new[]
-            {
-                "Textures/btn0",
-                "Textures/btn1",
-                "Textures/btn2"
-            };
-
-            Console.WriteLine("Game1: Starting asset loading");
+            var assetPaths = new[] { "Textures/btn0", "Textures/btn1", "Textures/btn2" };
             await contentManager.LoadAssetsAsync<Texture2D>(assetPaths);
-            Console.WriteLine("Game1: Asset loading completed");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Game1: Asset loading error: {ex}");
+            Console.WriteLine($"Asset loading error: {ex}");
             currentState = GameState.Error;
         }
     }
@@ -149,11 +137,9 @@ public class Game1 : Game
                 case GameState.Loading:
                     await UpdateLoadingState(gameTime);
                     break;
-
                 case GameState.Running:
                     UpdateRunningState(gameTime);
                     break;
-
                 case GameState.Error:
                     UpdateErrorState(gameTime);
                     break;
@@ -171,20 +157,18 @@ public class Game1 : Game
     private async Task UpdateLoadingState(GameTime gameTime)
     {
         loadingScreen.Update(gameTime);
-    
-        if (!isTransitioningToMenu && 
-            !contentManager.IsLoading && 
-            contentManager.Progress >= 1.0f && 
+
+        if (!isTransitioningToMenu &&
+            !contentManager.IsLoading &&
+            contentManager.Progress >= 1.0f &&
             !contentManager.HasError)
         {
             isTransitioningToMenu = true;
-            Console.WriteLine("Content loading complete, transitioning to menu scene");
-            await Task.Delay(500); // Smooth transition
-        
+            await Task.Delay(500);
+
             try
             {
                 await sceneManager.LoadSceneAsync("MenuScene");
-                Console.WriteLine("Menu scene loaded successfully");
                 currentState = GameState.Running;
             }
             catch (Exception ex)
@@ -194,26 +178,17 @@ public class Game1 : Game
             }
         }
         else if (contentManager.HasError)
-        {
-            Console.WriteLine($"Content loading error: {contentManager.LoadException?.Message}");
             currentState = GameState.Error;
-        }
-    
+
         await contentManager.UpdateAsync();
     }
 
-    private void UpdateRunningState(GameTime gameTime)
-    {
-        sceneManager.UpdateCurrentScene(gameTime);
-    }
+    private void UpdateRunningState(GameTime gameTime) => sceneManager.UpdateCurrentScene(gameTime);
 
     private void UpdateErrorState(GameTime gameTime)
     {
-        // Handle error state, maybe show error message or exit
-        if (gameTime.TotalGameTime.TotalSeconds > 5) // Wait 5 seconds before exiting
-        {
+        if (gameTime.TotalGameTime.TotalSeconds > 5)
             Exit();
-        }
     }
 
     protected override void Draw(GameTime gameTime)
@@ -227,11 +202,9 @@ public class Game1 : Game
                 case GameState.Loading:
                     loadingScreen.Draw();
                     break;
-
                 case GameState.Running:
                     sceneManager.DrawCurrentScene(gameTime);
                     break;
-
                 case GameState.Error:
                     DrawErrorScreen();
                     break;
@@ -254,7 +227,7 @@ public class Game1 : Game
     protected override void OnExiting(object sender, ExitingEventArgs args)
     {
         if (isExiting) return;
-        isExiting = true; // Set this instead of isInitialized
+        isExiting = true;
 
         try
         {

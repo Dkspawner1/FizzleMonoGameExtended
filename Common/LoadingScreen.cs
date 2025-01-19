@@ -1,10 +1,7 @@
 using System;
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using FizzleMonoGameExtended.Common;
 using FizzleMonoGameExtended.Managers;
 
-namespace FizzleMonoGameExtended.Core;
+namespace FizzleMonoGameExtended.Common;
 
 public class LoadingScreen : DisposableComponent
 {
@@ -13,21 +10,17 @@ public class LoadingScreen : DisposableComponent
     private readonly ContentManagerAsync content;
     private readonly Texture2D fadeTexture;
     private readonly Texture2D progressTexture;
-    private readonly Vector2 textPosition;
+    private readonly Color progressBarColor = Color.Black;
+    private readonly Color progressBarBackgroundColor = Color.DarkGray;
 
-    private LoadingState currentState = LoadingState.Starting;
+    private LoadingStates currentStates = LoadingStates.Starting;
     private float fadeAlpha = 1f;
-    private float progressBarWidth;
-    private float progressBarHeight;
-    private Vector2 progressBarPosition;
     private Rectangle progressBarBounds;
-    private readonly Color progressBarColor = new(0, 200, 0); // Green
-    private readonly Color progressBarBackgroundColor = new(50, 50, 50); // Dark Gray
 
     public bool IsComplete { get; private set; }
 
     [Flags]
-    private enum LoadingState : byte
+    private enum LoadingStates : byte
     {
         None = 0,
         Starting = 1 << 0,
@@ -43,20 +36,19 @@ public class LoadingScreen : DisposableComponent
 
         // Create solid color textures
         fadeTexture = new Texture2D(graphics, 1, 1);
-        fadeTexture.SetData(new[] { Color.Black });
+        fadeTexture.SetData([Color.Black]);
 
         progressTexture = new Texture2D(graphics, 1, 1);
-        progressTexture.SetData(new[] { Color.White });
+        progressTexture.SetData([Color.White]);
 
         CalculateProgressBarDimensions();
-        textPosition = CalculateTextPosition();
     }
 
     private void CalculateProgressBarDimensions()
     {
-        progressBarWidth = graphics.Viewport.Width * 0.6f;
-        progressBarHeight = 20;
-        progressBarPosition = new Vector2(
+        var progressBarWidth = graphics.Viewport.Width * 0.6f;
+        const float progressBarHeight = 20f;
+        var progressBarPosition = new Vector2(
             (graphics.Viewport.Width - progressBarWidth) / 2,
             (graphics.Viewport.Height - progressBarHeight) / 2
         );
@@ -69,21 +61,13 @@ public class LoadingScreen : DisposableComponent
         );
     }
 
-    private Vector2 CalculateTextPosition()
-    {
-        return new Vector2(
-            progressBarPosition.X,
-            progressBarPosition.Y - 30
-        );
-    }
-
     public void Update(GameTime gameTime)
     {
         if (IsDisposed) return;
 
         try
         {
-            float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            var deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
             Console.WriteLine($"LoadingScreen Update - Progress: {content.Progress:P0} ({content.Progress})");
             UpdateLoadingState(deltaTime);
         }
@@ -97,20 +81,20 @@ public class LoadingScreen : DisposableComponent
     {
         const float fadeSpeed = 2f;
 
-        switch (currentState)
+        switch (currentStates)
         {
-            case LoadingState.Starting:
+            case LoadingStates.Starting:
                 fadeAlpha = Math.Max(0f, fadeAlpha - deltaTime * fadeSpeed);
                 if (fadeAlpha <= 0f)
-                    currentState = LoadingState.Loading;
+                    currentStates = LoadingStates.Loading;
                 break;
 
-            case LoadingState.Loading:
+            case LoadingStates.Loading:
                 if (content.Progress >= 1.0f && !content.HasError)
-                    currentState = LoadingState.Finished;
+                    currentStates = LoadingStates.Finished;
                 break;
 
-            case LoadingState.Finished:
+            case LoadingStates.Finished:
                 fadeAlpha = Math.Min(1f, fadeAlpha + deltaTime * fadeSpeed);
                 if (fadeAlpha >= 1f)
                     IsComplete = true;
@@ -126,15 +110,10 @@ public class LoadingScreen : DisposableComponent
         {
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
 
-            // Always draw the progress bar while loading
-            if (currentState == LoadingState.Loading || currentState == LoadingState.Starting)
-            {
+            if (currentStates is LoadingStates.Loading or LoadingStates.Starting)
                 DrawProgressBar();
-            }
 
-            // Draw fade overlay
             spriteBatch.Draw(fadeTexture, graphics.Viewport.Bounds, Color.Black * fadeAlpha);
-
             spriteBatch.End();
         }
         catch (Exception ex)
@@ -145,8 +124,8 @@ public class LoadingScreen : DisposableComponent
 
     private void DrawProgressBar()
     {
-        var progressWidth = (int)(progressBarWidth * content.Progress);
-        Console.WriteLine($"Drawing progress bar - Width: {progressWidth}/{progressBarWidth} (Progress: {content.Progress:P0})");
+        var progressWidth = (int)(progressBarBounds.Width * content.Progress);
+        Console.WriteLine($"Drawing progress bar - Width: {progressWidth}/{progressBarBounds.Width} (Progress: {content.Progress:P0})");
     
         spriteBatch.Draw(progressTexture, progressBarBounds, progressBarBackgroundColor);
 
@@ -158,24 +137,8 @@ public class LoadingScreen : DisposableComponent
         );
         spriteBatch.Draw(progressTexture, progressRect, progressBarColor);
     }
-    private void DrawLoadingText()
-    {
-        if (content.HasError)
-        {
-            // Implement error message display or remove this block
-        }
-        else
-        {
-            var loadingText = $"Loading... {(int)(content.Progress * 100)}%";
-            // var font =  content.Load<SpriteFont>("")
-            // Implement text drawing
-        }
-    }
 
-    public void OnResolutionChanged()
-    {
-        CalculateProgressBarDimensions();
-    }
+    public void OnResolutionChanged() => CalculateProgressBarDimensions();
 
     protected override void DisposeManagedResources()
     {

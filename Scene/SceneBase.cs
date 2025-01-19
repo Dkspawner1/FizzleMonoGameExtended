@@ -15,15 +15,14 @@ public abstract class SceneBase : DisposableComponent, ITextureUser
     protected readonly World world;
     protected readonly Game1 game;
     protected readonly ConcurrentDictionary<string, Texture2D> SceneTextures;
+    private readonly object initLock = new();
     
     protected ISystem<float> UpdateSystem { get; set; }
-    protected ISystem<SpriteBatch> DrawSystem { get;  set; }
-
+    protected ISystem<SpriteBatch> DrawSystem { get; set; }
     protected SpriteBatch SpriteBatch { get; private set; }
     protected TexturePool TexturePool { get; private set; }
 
     private bool isInitialized;
-    private readonly object initLock = new();
 
     protected SceneBase(Game1 game)
     {
@@ -39,13 +38,17 @@ public abstract class SceneBase : DisposableComponent, ITextureUser
         lock (initLock)
         {
             if (isInitialized) return;
-            
             TexturePool = pool ?? throw new ArgumentNullException(nameof(pool));
             SpriteBatch = new SpriteBatch(game.GraphicsDevice);
-            
             isInitialized = true;
         }
 
+        await LoadTexturesAsync();
+        await InitializeSystemsAsync();
+    }
+
+    private async Task LoadTexturesAsync()
+    {
         var textures = GetRequiredTextures();
         var loadTasks = new Task[textures.Length];
 
@@ -67,36 +70,19 @@ public abstract class SceneBase : DisposableComponent, ITextureUser
         }
 
         await Task.WhenAll(loadTasks);
-        await InitializeSystemsAsync();
     }
 
     protected abstract string[] GetRequiredTextures();
 
     protected virtual Task InitializeSystemsAsync()
     {
-        if (UpdateSystem == null)
-        {
-            UpdateSystem = CreateUpdateSystem();
-        }
-
-        if (DrawSystem == null)
-        {
-            DrawSystem = CreateDrawSystem();
-        }
-
+        UpdateSystem ??= CreateUpdateSystem();
+        DrawSystem ??= CreateDrawSystem();
         return Task.CompletedTask;
     }
 
-    protected virtual ISystem<float> CreateUpdateSystem()
-    {
-        return new EmptySystem<float>();
-    }
-
-    protected virtual ISystem<SpriteBatch> CreateDrawSystem()
-    {
-        return new EmptySystem<SpriteBatch>();
-    }
-
+    protected virtual ISystem<float> CreateUpdateSystem() => new EmptySystem<float>();
+    protected virtual ISystem<SpriteBatch> CreateDrawSystem() => new EmptySystem<SpriteBatch>();
 
     public virtual void Update(GameTime gameTime)
     {
@@ -104,8 +90,7 @@ public abstract class SceneBase : DisposableComponent, ITextureUser
 
         try
         {
-            float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
-            UpdateSystem?.Update(deltaTime);
+            UpdateSystem?.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
         }
         catch (Exception ex)
         {
@@ -133,18 +118,15 @@ public abstract class SceneBase : DisposableComponent, ITextureUser
     {
         if (pool == null) return;
 
-        foreach (var kvp in SceneTextures)
+        foreach (var (key, texture) in SceneTextures)
         {
-            if (kvp.Value != null)
+            try
             {
-                try
-                {
-                    pool.Release(kvp.Key, kvp.Value);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error releasing texture {kvp.Key}: {ex.Message}");
-                }
+                pool.Release(key, texture);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error releasing texture {key}: {ex.Message}");
             }
         }
         SceneTextures.Clear();
@@ -166,7 +148,7 @@ public abstract class SceneBase : DisposableComponent, ITextureUser
         }
     }
 
-    private class EmptySystem<T> : ISystem<T>
+    private sealed class EmptySystem<T> : ISystem<T>
     {
         public bool IsEnabled { get; set; } = true;
         public void Update(T state) { }
