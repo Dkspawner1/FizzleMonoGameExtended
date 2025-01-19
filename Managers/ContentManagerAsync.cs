@@ -1,19 +1,19 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xna.Framework.Content;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace FizzleMonoGameExtended.Managers;
 
 public class ContentManagerAsync : ContentManager
 {
-    private readonly ConcurrentDictionary<string, object> loadedAssets = new(32, 4);
+    private readonly ConcurrentDictionary<string, object> loadedAssets = new();
     private readonly CancellationTokenSource cts = new();
-    private readonly TaskCompletionSource<bool> loadingComplete = new();
     private readonly SemaphoreSlim loadingSemaphore = new(1, 1);
+    private readonly TaskCompletionSource<bool> loadingComplete = new();
 
     private int totalAssets;
     private int loadedAssetCount;
@@ -24,27 +24,41 @@ public class ContentManagerAsync : ContentManager
     public Exception LoadException => loadException;
     public bool IsLoading { get; private set; }
 
-    public ContentManagerAsync(IServiceProvider serviceProvider) : base(serviceProvider) { }
+    public ContentManagerAsync(IServiceProvider serviceProvider) : base(serviceProvider)
+    {
+        RootDirectory = "Content";
+    }
 
     public async Task LoadAssetsAsync<T>(string[] assetNames)
     {
+        if (assetNames == null || assetNames.Length == 0)
+            return;
+
+        await loadingSemaphore.WaitAsync();
         try
         {
-            await loadingSemaphore.WaitAsync();
             if (IsLoading) return;
             IsLoading = true;
 
-            Interlocked.Add(ref totalAssets, assetNames.Length);
-            var loadTasks = new List<Task>(assetNames.Length);
+            totalAssets = assetNames.Length;
+            loadedAssetCount = 0;
 
+            var loadTasks = new List<Task>(assetNames.Length);
             foreach (var assetName in assetNames)
             {
                 if (cts.Token.IsCancellationRequested) break;
                 loadTasks.Add(LoadAssetAsync<T>(assetName));
+                await Task.Delay(10); // Small delay to prevent overwhelming the content pipeline
             }
 
             await Task.WhenAll(loadTasks);
             loadingComplete.TrySetResult(true);
+        }
+        catch (Exception ex)
+        {
+            loadException = ex;
+            loadingComplete.TrySetException(ex);
+            throw;
         }
         finally
         {
@@ -57,10 +71,19 @@ public class ContentManagerAsync : ContentManager
     {
         try
         {
-            // Ensure path matches MonoGame's content loading convention
-            string normalizedPath = Path.Combine(RootDirectory, assetName);
-        
-            var asset = await Task.Run(() => base.Load<T>(assetName), cts.Token);
+            var asset = await Task.Run(() =>
+            {
+                try
+                {
+                    return Load<T>(assetName);
+                }
+                catch (ContentLoadException ex)
+                {
+                    Console.WriteLine($"Failed to load {assetName}: {ex.Message}");
+                    throw;
+                }
+            }, cts.Token);
+
             if (loadedAssets.TryAdd(assetName, asset))
             {
                 Interlocked.Increment(ref loadedAssetCount);
@@ -69,10 +92,20 @@ public class ContentManagerAsync : ContentManager
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Console.WriteLine($"Failed to load asset: {assetName}: {ex.Message}");
-            loadException = ex;
             throw;
         }
     }
+
+    public override T Load<T>(string assetName)
+    {
+        if (loadedAssets.TryGetValue(assetName, out var asset))
+            return (T)asset;
+
+        var loadedAsset = base.Load<T>(assetName);
+        loadedAssets.TryAdd(assetName, loadedAsset);
+        return loadedAsset;
+    }
+
     public async Task UpdateAsync()
     {
         if (cts.Token.IsCancellationRequested) return;
@@ -81,6 +114,7 @@ public class ContentManagerAsync : ContentManager
         {
             if (loadedAssetCount == totalAssets || HasError)
             {
+                await Task.Yield(); // Add this to make the method truly async
                 loadingComplete.TrySetResult(true);
             }
         }
@@ -92,49 +126,26 @@ public class ContentManagerAsync : ContentManager
         }
     }
 
-    public new T Load<T>(string assetName)
-    {
-        if (loadedAssets.TryGetValue(assetName, out var asset))
-            return (T)asset;
-            
-        throw new ContentLoadException(
-            $"Asset {assetName} not found or not loaded yet. Current progress: {Progress:P0}");
-    }
-
-    public void CancelLoading()
-    {
-        if (!cts.IsCancellationRequested)
-        {
-            cts.Cancel();
-            loadingComplete.TrySetCanceled();
-        }
-    }
-
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             try
             {
-                if (!cts.IsCancellationRequested)
-                    cts.Cancel();
-                    
+                cts.Cancel();
                 cts.Dispose();
                 loadingSemaphore.Dispose();
+
+                foreach (var asset in loadedAssets.Values)
+                {
+                    (asset as IDisposable)?.Dispose();
+                }
+                loadedAssets.Clear();
             }
             catch (ObjectDisposedException)
             {
                 // Ignore if already disposed
             }
-
-            foreach (var asset in loadedAssets.Values)
-            {
-                if (asset is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
-            }
-            loadedAssets.Clear();
         }
         base.Dispose(disposing);
     }

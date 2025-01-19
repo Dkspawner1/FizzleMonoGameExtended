@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using FizzleMonoGameExtended.Assets;
 using FizzleMonoGameExtended.Common;
+using FizzleMonoGameExtended.Scene;
 
 namespace FizzleMonoGameExtended.Managers;
 
@@ -17,6 +18,13 @@ public class SceneManager(TexturePool texturePool) : DisposableComponent
     {
         if (IsDisposed) return;
         scenes[sceneName] = scene;
+    }
+    public void OnResolutionChanged(int width, int height)
+    {
+        if (currentScene is IResolutionDependent resolutionDependent)
+        {
+            resolutionDependent.OnResolutionChanged(width, height);
+        }
     }
 
     public async Task LoadSceneAsync(string sceneName)

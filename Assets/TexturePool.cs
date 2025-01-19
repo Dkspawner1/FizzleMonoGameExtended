@@ -1,42 +1,57 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using FizzleMonoGameExtended.Common;
-using FizzleMonoGameExtended.Managers;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Content;
+using Microsoft.Xna.Framework;
 
 namespace FizzleMonoGameExtended.Assets;
 
-public class TexturePool(GraphicsDevice graphics, ContentManager content) : DisposableComponent
+public class TexturePool : DisposableComponent
 {
-    private readonly Dictionary<string, Queue<Texture2D>> pool = [];
+    private readonly GraphicsDevice graphics;
+    private readonly ContentManager content;
+    private readonly ConcurrentDictionary<string, Queue<Texture2D>> pool = new();
+    private readonly object lockObject = new();
+
+    public TexturePool(GraphicsDevice graphicsDevice, ContentManager contentManager)
+    {
+        graphics = graphicsDevice ?? throw new ArgumentNullException(nameof(graphicsDevice));
+        content = contentManager ?? throw new ArgumentNullException(nameof(contentManager));
+    }
+
     public Texture2D Acquire(string textureName)
     {
         if (IsDisposed)
             throw new ObjectDisposedException(nameof(TexturePool));
 
-        if (!pool.ContainsKey(textureName))
-            pool[textureName] = new Queue<Texture2D>();
+        var queue = pool.GetOrAdd(textureName, _ => new Queue<Texture2D>());
 
-        if (pool[textureName].Count > 0)
-            return pool[textureName].Dequeue();
+        lock (lockObject)
+        {
+            if (queue.Count > 0)
+                return queue.Dequeue();
+        }
 
+        return LoadTexture(textureName);
+    }
+
+    private Texture2D LoadTexture(string textureName)
+    {
         try
         {
-            // Match MonoGame's content loading pattern
-            var texture = content.Load<Texture2D>(textureName);
-            return texture;
+            return content.Load<Texture2D>(textureName);
         }
         catch (ContentLoadException ex)
         {
             Console.WriteLine($"Error loading texture '{textureName}': {ex.Message}");
-            var fallback = CreateFallbackTexture(textureName);
-            pool[textureName].Enqueue(fallback);
-            return fallback;
+            return CreateFallbackTexture();
         }
     }
-    private Texture2D CreateFallbackTexture(string textureName)
+
+    private Texture2D CreateFallbackTexture()
     {
-        // Create a distinctive fallback texture (checkerboard pattern)
         var texture = new Texture2D(graphics, 64, 64);
         var colors = new Color[64 * 64];
         for (int y = 0; y < 64; y++)
@@ -46,7 +61,6 @@ public class TexturePool(GraphicsDevice graphics, ContentManager content) : Disp
                 colors[x + y * 64] = ((x + y) % 2 == 0) ? Color.Magenta : Color.Black;
             }
         }
-
         texture.SetData(colors);
         return texture;
     }
@@ -55,18 +69,14 @@ public class TexturePool(GraphicsDevice graphics, ContentManager content) : Disp
     {
         if (IsDisposed)
             throw new ObjectDisposedException(nameof(TexturePool));
+        if (texture == null)
+            throw new ArgumentNullException(nameof(texture));
 
-        if (!pool.ContainsKey(textureName))
-            pool[textureName] = new Queue<Texture2D>();
-
-        pool[textureName].Enqueue(texture);
-    }
-
-    private Texture2D CreateTexture(string textureName)
-    {
-        var texture = new Texture2D(graphics, 1, 1);
-        texture.SetData(new[] { Color.White });
-        return texture;
+        var queue = pool.GetOrAdd(textureName, _ => new Queue<Texture2D>());
+        lock (lockObject)
+        {
+            queue.Enqueue(texture);
+        }
     }
 
     protected override void DisposeManagedResources()
@@ -79,7 +89,6 @@ public class TexturePool(GraphicsDevice graphics, ContentManager content) : Disp
                 texture.Dispose();
             }
         }
-
         pool.Clear();
     }
 }

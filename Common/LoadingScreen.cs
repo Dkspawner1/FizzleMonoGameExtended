@@ -1,18 +1,28 @@
 using System;
-using System.Collections.Generic;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using FizzleMonoGameExtended.Common;
 using FizzleMonoGameExtended.Managers;
+
+namespace FizzleMonoGameExtended.Core;
 
 public class LoadingScreen : DisposableComponent
 {
     private readonly GraphicsDevice graphics;
     private readonly SpriteBatch spriteBatch;
     private readonly ContentManagerAsync content;
-    private readonly Dictionary<string, Texture2D> loadingTextures = new(4);
+    private readonly Texture2D fadeTexture;
+    private readonly Texture2D progressTexture;
+    private readonly Vector2 textPosition;
 
     private LoadingState currentState = LoadingState.Starting;
     private float fadeAlpha = 1f;
-    private Vector2 textPosition = Vector2.Zero;
+    private float progressBarWidth;
+    private float progressBarHeight;
+    private Vector2 progressBarPosition;
+    private Rectangle progressBarBounds;
+    private readonly Color progressBarColor = new(0, 200, 0); // Green
+    private readonly Color progressBarBackgroundColor = new(50, 50, 50); // Dark Gray
 
     public bool IsComplete { get; private set; }
 
@@ -27,54 +37,80 @@ public class LoadingScreen : DisposableComponent
 
     public LoadingScreen(GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, ContentManagerAsync contentManager)
     {
-        graphics = graphicsDevice;
-        this.spriteBatch = spriteBatch;
-        content = contentManager;
+        graphics = graphicsDevice ?? throw new ArgumentNullException(nameof(graphicsDevice));
+        this.spriteBatch = spriteBatch ?? throw new ArgumentNullException(nameof(spriteBatch));
+        content = contentManager ?? throw new ArgumentNullException(nameof(contentManager));
 
-        InitializeTextures();
-        CalculateTextPosition();
+        // Create solid color textures
+        fadeTexture = new Texture2D(graphics, 1, 1);
+        fadeTexture.SetData(new[] { Color.Black });
+
+        progressTexture = new Texture2D(graphics, 1, 1);
+        progressTexture.SetData(new[] { Color.White });
+
+        CalculateProgressBarDimensions();
+        textPosition = CalculateTextPosition();
     }
 
-    private void InitializeTextures()
+    private void CalculateProgressBarDimensions()
     {
-        loadingTextures["fade"] = new Texture2D(graphics, 1, 1);
-        loadingTextures["fade"].SetData(new[] { Color.Black });
-        loadingTextures["progress"] = new Texture2D(graphics, 1, 1);
-        loadingTextures["progress"].SetData(new[] { Color.White });
+        progressBarWidth = graphics.Viewport.Width * 0.6f;
+        progressBarHeight = 20;
+        progressBarPosition = new Vector2(
+            (graphics.Viewport.Width - progressBarWidth) / 2,
+            (graphics.Viewport.Height - progressBarHeight) / 2
+        );
+
+        progressBarBounds = new Rectangle(
+            (int)progressBarPosition.X,
+            (int)progressBarPosition.Y,
+            (int)progressBarWidth,
+            (int)progressBarHeight
+        );
     }
 
-    private void CalculateTextPosition()
+    private Vector2 CalculateTextPosition()
     {
-        int barWidth = (int)(graphics.Viewport.Width * 0.6f);
-        int barHeight = 20;
-        int barX = (graphics.Viewport.Width - barWidth) / 2;
-        int barY = (graphics.Viewport.Height - barHeight) / 2;
-        textPosition = new Vector2(barX, barY - 30);
+        return new Vector2(
+            progressBarPosition.X,
+            progressBarPosition.Y - 30
+        );
     }
 
     public void Update(GameTime gameTime)
     {
         if (IsDisposed) return;
 
-        float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        try
+        {
+            float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            UpdateLoadingState(deltaTime);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading screen update error: {ex.Message}");
+        }
+    }
+
+    private void UpdateLoadingState(float deltaTime)
+    {
+        const float fadeSpeed = 2f;
+
         switch (currentState)
         {
             case LoadingState.Starting:
-                fadeAlpha = Math.Max(0f, fadeAlpha - deltaTime * 2f); // Faster fade
+                fadeAlpha = Math.Max(0f, fadeAlpha - deltaTime * fadeSpeed);
                 if (fadeAlpha <= 0f)
                     currentState = LoadingState.Loading;
                 break;
 
             case LoadingState.Loading:
-                // Add progress smoothing
-                if (content.Progress >= 1.0f)
-                {
+                if (content.Progress >= 1.0f && !content.HasError)
                     currentState = LoadingState.Finished;
-                }
                 break;
 
             case LoadingState.Finished:
-                fadeAlpha = Math.Min(1f, fadeAlpha + deltaTime);
+                fadeAlpha = Math.Min(1f, fadeAlpha + deltaTime * fadeSpeed);
                 if (fadeAlpha >= 1f)
                     IsComplete = true;
                 break;
@@ -85,47 +121,64 @@ public class LoadingScreen : DisposableComponent
     {
         if (IsDisposed) return;
 
-        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-
-        if (currentState is LoadingState.Loading)
+        try
         {
-            DrawProgressBar();
-            DrawLoadingText();
-        }
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
 
-        spriteBatch.Draw(loadingTextures["fade"], graphics.Viewport.Bounds, Color.Black * fadeAlpha);
-        spriteBatch.End();
+            if (currentState == LoadingState.Loading)
+            {
+                DrawProgressBar();
+                DrawLoadingText();
+            }
+
+            // Draw fade overlay
+            spriteBatch.Draw(fadeTexture, graphics.Viewport.Bounds, Color.Black * fadeAlpha);
+
+            spriteBatch.End();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading screen draw error: {ex.Message}");
+        }
     }
 
     private void DrawProgressBar()
     {
-        int barWidth = (int)(graphics.Viewport.Width * 0.6f);
-        int barHeight = 20;
-        int barX = (graphics.Viewport.Width - barWidth) / 2;
-        int barY = (graphics.Viewport.Height - barHeight) / 2;
+        // Draw background
+        spriteBatch.Draw(progressTexture, progressBarBounds, progressBarBackgroundColor);
 
-        spriteBatch.Draw(loadingTextures["progress"], 
-            new Rectangle(barX, barY, barWidth, barHeight), Color.DarkGray);
-        spriteBatch.Draw(loadingTextures["progress"],
-            new Rectangle(barX, barY, (int)(barWidth * content.Progress), barHeight), Color.Green);
+        // Draw progress
+        var progressWidth = (int)(progressBarWidth * content.Progress);
+        var progressRect = new Rectangle(
+            progressBarBounds.X,
+            progressBarBounds.Y,
+            progressWidth,
+            progressBarBounds.Height
+        );
+        spriteBatch.Draw(progressTexture, progressRect, progressBarColor);
     }
 
     private void DrawLoadingText()
     {
-        var loadingText = $"Loading... {(int)(content.Progress * 100)}%";
-        var textSize = Vector2.One * 12;
-        textPosition = new Vector2(
-            (graphics.Viewport.Width - textSize.X) / 2,
-            (graphics.Viewport.Height - textSize.Y) / 2 - 30
-        );
+        if (content.HasError)
+        {
+            // Implement error message display or remove this block
+        }
+        else
+        {
+            var loadingText = $"Loading... {(int)(content.Progress * 100)}%";
+            // Implement text drawing
+        }
+    }
+
+    public void OnResolutionChanged()
+    {
+        CalculateProgressBarDimensions();
     }
 
     protected override void DisposeManagedResources()
     {
-        foreach (var texture in loadingTextures.Values)
-        {
-            texture?.Dispose();
-        }
-        loadingTextures.Clear();
+        fadeTexture?.Dispose();
+        progressTexture?.Dispose();
     }
 }
