@@ -43,6 +43,7 @@ public class Game1 : Game
         graphics.SynchronizeWithVerticalRetrace = false;
 
         disposableManager.Add(contentManager);
+        Window.AllowUserResizing = true;
         Window.ClientSizeChanged += OnClientSizeChanged;
         Exiting += OnExiting;
     }

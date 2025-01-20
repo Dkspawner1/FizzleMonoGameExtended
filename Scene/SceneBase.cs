@@ -10,7 +10,7 @@ using FizzleMonoGameExtended.Common;
 
 namespace FizzleMonoGameExtended.Scene;
 
-public abstract class SceneBase : DisposableComponent, ITextureUser
+public abstract class SceneBase : DisposableComponent, ITextureUser, IResolutionDependent
 {
     protected readonly World world;
     protected readonly Game1 game;
@@ -154,4 +154,7 @@ public abstract class SceneBase : DisposableComponent, ITextureUser
         public void Update(T state) { }
         public void Dispose() { }
     }
+
+
+    public abstract void OnResolutionChanged(int width, int height);
 }

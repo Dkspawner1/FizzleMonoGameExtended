@@ -4,17 +4,20 @@ using System.Threading.Tasks;
 using Microsoft.Xna.Framework.Input;
 using DefaultEcs;
 using DefaultEcs.System;
+using FizzleMonoGameExtended.ECS.Components;
+using FizzleMonoGameExtended.ECS.Systems.Render;
+using FizzleMonoGameExtended.ECS.Systems.Update;
 
 namespace FizzleMonoGameExtended.Scene;
 
-public class MenuScene(Game1 game) : SceneBase(game), IResolutionDependent
+public class MenuScene(Game1 game) : SceneBase(game)
 {
     private readonly List<Entity> buttonEntities = new();
     private MouseState previousMouseState;
     private const float BUTTON_SPACING = 125f;
     private const int BUTTON_COUNT = 3;
 
-    public void OnResolutionChanged(int width, int height)
+    public override void OnResolutionChanged(int width, int height)
     {
         RecalculateButtonPositions();
     }
@@ -81,7 +84,8 @@ public class MenuScene(Game1 game) : SceneBase(game), IResolutionDependent
 
         string[] buttonIds = ["Play", "Settings", "Exit"];
 
-        for (var i = 0; i < BUTTON_COUNT; i++)        {
+        for (var i = 0; i < BUTTON_COUNT; i++)
+        {
             var buttonPosition = new Vector2(
                 400,
                 300 + (i * BUTTON_SPACING)
@@ -179,124 +183,3 @@ public class MenuScene(Game1 game) : SceneBase(game), IResolutionDependent
 }
 
 // Components
-public struct TransformComponent
-{
-    public Vector2 Position;
-    public float Rotation;
-    public Vector2 Scale;
-}
-
-public struct SpriteComponent
-{
-    public Texture2D Texture;
-    public Vector2 Origin;
-    public Color Color;
-    public float LayerDepth;
-}
-
-public struct ButtonComponent
-{
-    public Texture2D Texture;
-    public Rectangle Bounds;
-    public MouseState CurrentMouseState;
-    public MouseState PreviousMouseState;
-    public bool IsHovered;
-    public bool IsPressed;
-    public string ButtonId;
-    
-}
-
-// Systems
-public class ButtonUpdateSystem(World world) : AEntitySetSystem<float>(world)
-{
-    protected override void Update(float deltaTime, in Entity entity)
-    {
-        ref var button = ref entity.Get<ButtonComponent>();
-        ref var sprite = ref entity.Get<SpriteComponent>();
-
-        var mousePosition = new Point(button.CurrentMouseState.X, button.CurrentMouseState.Y);
-        button.IsHovered = button.Bounds.Contains(mousePosition);
-
-        sprite.Color = button.IsHovered ? Color.Gray : Color.White;
-
-        if (button.IsHovered)
-        {
-            if (button.CurrentMouseState.LeftButton == ButtonState.Pressed)
-            {
-                button.IsPressed = true;
-                sprite.Color = Color.DarkGray;
-            }
-            else
-            {
-                button.IsPressed = false;
-                if (button.PreviousMouseState.LeftButton == ButtonState.Pressed &&
-                    button.CurrentMouseState.LeftButton == ButtonState.Released)
-                    OnButtonClick(entity, button.ButtonId);
-            }
-        }
-        else
-            button.IsPressed = false;
-    }
-
-    private void OnButtonClick(in Entity entity, string buttonId)
-    {
-        Console.WriteLine($"Button '{buttonId}' clicked!");
-        
-        switch (buttonId)
-        {
-            case "Play":
-                HandlePlayClick();
-                break;
-            case "Settings":
-                HandleSettingsClick();
-                break;
-            case "Exit":
-                HandleExitClick();
-                break;
-        }
-    }
-    private void HandlePlayClick()
-    {
-        Console.WriteLine("Starting game...");
-        // Add play logic
-    }
-    private void HandleSettingsClick()
-    {
-        Console.WriteLine("Opening settings menu...");
-        // Add settings logic
-    }
-    private void HandleExitClick()
-    {
-        Console.WriteLine("Exiting game...");
-        // Add exit logic
-    }
-}
-
-public class TransformUpdateSystem(World world) : AEntitySetSystem<float>(world)
-{
-    protected override void Update(float deltaTime, in Entity entity)
-    {
-        ref var transform = ref entity.Get<TransformComponent>();
-    }
-}
-
-public class SpriteRenderSystem(World world) : AEntitySetSystem<SpriteBatch>(world)
-{
-    protected override void Update(SpriteBatch spriteBatch, in Entity entity)
-    {
-        ref var transform = ref entity.Get<TransformComponent>();
-        ref var sprite = ref entity.Get<SpriteComponent>();
-        ref var button = ref entity.Get<ButtonComponent>();
-
-        spriteBatch.Draw(
-            sprite.Texture,
-            button.Bounds,
-            null,
-            sprite.Color,
-            transform.Rotation,
-            sprite.Origin,
-            SpriteEffects.None,
-            sprite.LayerDepth
-        );
-    }
-}
