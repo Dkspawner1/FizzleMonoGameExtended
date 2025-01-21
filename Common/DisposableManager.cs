@@ -5,11 +5,13 @@ namespace FizzleMonoGameExtended.Common;
 
 public class DisposableManager : DisposableComponent
 {
-    private readonly List<IDisposable> disposables = [];
+    // Pre-allocate capacity
+    private readonly List<IDisposable> disposables = new(16);
 
     public void Add(IDisposable disposable)
     {
-        ArgumentNullException.ThrowIfNull(disposable);
+        // Early exit for null or disposed state
+        if (IsDisposed || disposable == null) return;
         disposables.Add(disposable);
     }
 
@@ -17,11 +19,11 @@ public class DisposableManager : DisposableComponent
 
     protected override void DisposeManagedResources()
     {
-        for (var i = disposables.Count - 1; i >= 0; i--)
+        // Dispose in reverse order for dependency handling
+        for (int i = disposables.Count - 1; i >= 0; i--)
         {
-            disposables[i].Dispose();
+            disposables[i]?.Dispose();
         }
-
         disposables.Clear();
     }
 }

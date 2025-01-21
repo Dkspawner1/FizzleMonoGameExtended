@@ -116,20 +116,26 @@ public abstract class SceneBase : DisposableComponent, ITextureUser, IResolution
 
     public virtual void ReleaseTextures(TexturePool pool)
     {
-        if (pool == null) return;
+        if (pool == null || IsDisposed) return;
 
-        foreach (var (key, texture) in SceneTextures)
+        // Take a snapshot to avoid enumeration issues
+        var texturesToRelease = SceneTextures.ToArray();
+    
+        foreach (var pair in texturesToRelease)
         {
             try
             {
-                pool.Release(key, texture);
+                // Thread-safe removal and disposal
+                if (SceneTextures.TryRemove(pair.Key, out var texture))
+                {
+                    pool.Release(pair.Key, texture);
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error releasing texture {key}: {ex.Message}");
+                Console.WriteLine($"Error releasing texture {pair.Key}: {ex.Message}");
             }
         }
-        SceneTextures.Clear();
     }
 
     protected override void DisposeManagedResources()

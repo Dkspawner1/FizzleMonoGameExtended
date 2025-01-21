@@ -4,16 +4,20 @@ namespace FizzleMonoGameExtended.Common;
 
 public class DisposableComponent : IDisposable
 {
-    public bool IsDisposed { get; private set; } = false;
+    protected volatile bool IsDisposed;
 
     protected virtual void Dispose(bool disposing)
     {
-        if (IsDisposed) return;
-        if (disposing)
-            DisposeManagedResources();
-
-        DisposeUnmanagedResources();
-        IsDisposed = true;
+        // Thread-safe check and set
+        if (!IsDisposed)
+        {
+            if (disposing)
+            {
+                DisposeManagedResources();
+            }
+            DisposeUnmanagedResources();
+            IsDisposed = true;
+        }
     }
 
     protected virtual void DisposeManagedResources()
